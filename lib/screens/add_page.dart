@@ -1,5 +1,9 @@
+import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
 
 class AddPostPage extends StatefulWidget {
   @override
@@ -8,7 +12,7 @@ class AddPostPage extends StatefulWidget {
 
 class _AddPostPageState extends State<AddPostPage> {
   DateTime selectedDate = DateTime.now();
-  String? imageUrl;
+  File? imageFile;
   TextEditingController descriptionController = TextEditingController();
 
   Future<void> _selectDate(BuildContext context) async {
@@ -25,11 +29,56 @@ class _AddPostPageState extends State<AddPostPage> {
     }
   }
 
-  void _selectImage() {
-    // Implementujte výběr obrázku
-    setState(() {
-      imageUrl = 'https://placekitten.com/200/200';
-    });
+  Future<void> _selectImage() async {
+    final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery);
+    if (pickedFile != null) {
+      setState(() {
+        imageFile = File(pickedFile.path);
+      });
+    }
+  }
+
+  Future<void> _submitPost() async {
+    if (imageFile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Prosím, vyberte obrázek.')),
+      );
+      return;
+    }
+
+    // Převedení obrázku na base64
+    List<int> imageBytes = await imageFile!.readAsBytes();
+    String base64Image = base64Encode(imageBytes);
+
+    // Příprava dat pro odeslání
+    Map<String, dynamic> postData = {
+      'date': DateFormat('yyyy-MM-dd').format(selectedDate),
+      'description': descriptionController.text,
+      'image': base64Image,
+      'user':1
+    };
+
+    // Odeslání dat na API
+    try {
+      final response = await http.post(
+        Uri.parse('http://lifetracker.euweb.cz/save_post.php'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(postData),
+      );
+
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Příspěvek byl úspěšně přidán.')),
+        );
+        Navigator.pop(context);
+      } else {
+        throw Exception('Failed to submit post');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Chyba při odesílání příspěvku: $e')),
+      );
+    }
   }
 
   @override
@@ -51,10 +100,10 @@ class _AddPostPageState extends State<AddPostPage> {
               child: Text('Vybrat obrázek'),
             ),
             SizedBox(height: 16),
-            if (imageUrl != null)
+            if (imageFile != null)
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: Image.network(imageUrl!, height: 200, width: double.infinity, fit: BoxFit.cover),
+                child: Image.file(imageFile!, height: 200, width: double.infinity, fit: BoxFit.cover),
               ),
             SizedBox(height: 16),
             TextField(
@@ -64,10 +113,7 @@ class _AddPostPageState extends State<AddPostPage> {
             ),
             SizedBox(height: 24),
             ElevatedButton(
-              onPressed: () {
-                // Implementujte přidání příspěvku
-                Navigator.pop(context);
-              },
+              onPressed: _submitPost,
               child: Text('Přidat příspěvek'),
             ),
           ],

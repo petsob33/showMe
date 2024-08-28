@@ -1,5 +1,9 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'dart:typed_data';
 
 class HomePage extends StatefulWidget {
   @override
@@ -7,13 +11,76 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final List<Map<String, dynamic>> posts = [
-    {'date': DateTime.now(), 'imageUrl': 'https://placekitten.com/200/200', 'description': 'Popis 1'},
-    {'date': DateTime.now().subtract(Duration(days: 1)), 'imageUrl': 'https://placekitten.com/201/201', 'description': 'Popis 2'},
-    {'date': DateTime.now().subtract(Duration(days: 2)), 'imageUrl': '', 'description': 'Popis 3 bez obrázku'},
-  ];
+  List<Map<String, dynamic>> posts = [];
+  bool isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchPosts();
+  }
+
+  Future<void> _fetchPosts() async {
+    setState(() {
+      isLoading = true;
+    });
+
+    try {
+      final userId = 1; // Replace with the actual user ID
+
+      final body = json.encode({'user_id': userId});
+
+      print('Sending request to server...'); // Log the request
+      final response = await http.post(
+        Uri.parse('http://lifetracker.euweb.cz/get_post.php'),
+        headers: {'Content-Type': 'application/json'},
+        body: body,
+      );
+      print('Received response. Status code: ${response.statusCode}'); // Log the response status
+
+      if (response.statusCode == 200) {
+        print('Response body: ${response.body}'); // Log the full response body
+        final List<dynamic> data = json.decode(response.body);
+        print('Decoded data: $data'); // Log decoded data
+
+        setState(() {
+          posts = data.map((item) {
+            print('Processing item: $item'); // Log each item being processed
+            return {
+              'date': _parseDate(item['date']),
+              'imageBase64': item['image'] as String?,
+              'description': item['description'] as String? ?? 'No description',
+            };
+          }).toList();
+        });
+        print('Processed posts: $posts'); // Log processed posts
+      } else {
+        throw Exception('Failed to load posts. Status code: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error in _fetchPosts: $e'); // Log the error
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Chyba při načítání příspěvků: $e')),
+      );
+    } finally {
+      setState(() {
+        isLoading = false;
+      });
+    }
+  }
+
+  DateTime? _parseDate(dynamic dateString) {
+    if (dateString == null) return null;
+    try {
+      return DateTime.parse(dateString);
+    } catch (e) {
+      print('Error parsing date: $dateString. Error: $e');
+      return null;
+    }
+  }
 
   int _currentIndex = 0;
+
 
   @override
   Widget build(BuildContext context) {
@@ -33,8 +100,8 @@ class _HomePageState extends State<HomePage> {
         index: _currentIndex,
         children: [
           _buildHomeContent(),
-          // AddPostPage(),
-          // SearchPage(),
+          Container(), // Placeholder for AddPostPage
+          Container(), // Placeholder for SearchPage
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
@@ -47,7 +114,8 @@ class _HomePageState extends State<HomePage> {
               Navigator.pushNamed(context, '/add_post');
             } else if (index == 2) {
               Navigator.pushNamed(context, '/search_page');
-            }          });
+            }
+          });
         },
         items: [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Domů'),
@@ -62,40 +130,126 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildHomeContent() {
-    return ListView.builder(
-      itemCount: posts.length,
-      itemBuilder: (context, index) {
-        final post = posts[index];
-        return Card(
-          margin: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-          color: Colors.white10,
-          child: Padding(
-            padding: EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  DateFormat('dd.MM.yyyy').format(post['date']),
-                  style: TextStyle(color: Colors.white70),
-                ),
-                SizedBox(height: 8),
-                if (post['imageUrl'].isNotEmpty)
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.network(
-                      post['imageUrl'],
-                      height: 200,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                SizedBox(height: 8),
-                Text(post['description']),
-              ],
+    if (isLoading) {
+      return Center(child: CircularProgressIndicator());
+    }
+
+    if (posts.isEmpty) {
+      return Center(child: Text('Žádné příspěvky k zobrazení'));
+    }
+
+    return RefreshIndicator(
+      onRefresh: _fetchPosts,
+      child: ListView.separated(
+        itemCount: posts.length,
+        separatorBuilder: (context, index) => Container(
+          height: 40,
+          child: Center(
+            child: Container(
+              margin: EdgeInsets.all(3),
+              width: 2,
+              color: Colors.white,
             ),
           ),
-        );
-      },
+        ),
+        itemBuilder: (context, index) {
+          final post = posts[index];
+          return Container(
+            margin: EdgeInsets.symmetric(horizontal: 26),
+            child: Column(
+              children: [
+                if (post['date'] != null)
+                  Container(
+                    width: double.infinity,
+                    padding: EdgeInsets.symmetric(vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[900],
+                      borderRadius: BorderRadius.vertical(top: Radius.circular(10)),
+                    ),
+                    child: Center(
+                      child: Text(
+                        DateFormat('dd.MM.yyyy').format(post['date']),
+                        style: TextStyle(color: Colors.white, fontSize: 18),
+                      ),
+                    ),
+                  ),
+                if (post['imageBase64'] != null && post['imageBase64'].isNotEmpty)
+                  Container(
+                    color: Colors.grey[900],
+                    child: Center(
+                      child: _buildBase64Image(post['imageBase64']),
+                    ),
+                  ),
+                Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[900],
+                    borderRadius: BorderRadius.vertical(bottom: Radius.circular(10)),
+                  ),
+                  child: Center(
+                    child: Text(
+                      post['description'] ?? 'No description',
+                      style: TextStyle(fontSize: 20, color: Colors.white),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     );
+  }
+
+  Widget _buildBase64Image(String? base64String) {
+    if (base64String == null || base64String.isEmpty) {
+      return Container(
+        height: 150,
+        width: 250,
+        color: Colors.grey[700],
+        child: Center(child: Text('Žádný obrázek', style: TextStyle(color: Colors.white))),
+      );
+    }
+
+    try {
+      base64String = base64String.trim();
+
+      if (base64String.startsWith('data:image')) {
+        base64String = base64String.split(',')[1];
+      }
+
+      print('Decoding base64 string: ${base64String.substring(0, min(50, base64String.length))}...');
+      Uint8List bytes = base64Decode(base64String);
+
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.memory(
+          bytes,
+          height: 150,
+          width: 250, // Zmenšená šířka
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            print('Error loading image: $error');
+            return Container(
+              height: 150,
+              width: 250, // Zmenšená šířka
+              color: Colors.grey[700],
+              child: Center(child: Text('Chyba při načítání obrázku', style: TextStyle(color: Colors.white))),
+            );
+          },
+        ),
+      );
+    } catch (e) {
+      print('Error decoding base64: $e');
+      print('Base64 string: ${base64String?.substring(0, min(50, base64String.length))}...');
+      return Container(
+        height: 150,
+        width: 250,
+        color: Colors.grey[700],
+        child: Center(child: Text('Neplatný formát obrázku', style: TextStyle(color: Colors.white))),
+      );
+    }
   }
 }
