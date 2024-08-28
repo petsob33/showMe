@@ -1,18 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
+
 
 class LoginPage extends StatefulWidget {
   @override
   _LoginPageState createState() => _LoginPageState();
 }
-
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
 
   Future<bool> _login(String username, String password) async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+
     final response = await http.post(
       Uri.parse('http://lifetracker.euweb.cz/verifyuser.php'),
       headers: <String, String>{
@@ -26,6 +29,7 @@ class _LoginPageState extends State<LoginPage> {
 
     if (response.statusCode == 200) {
       final result = jsonDecode(response.body);
+      prefs.setInt('user_id', result['user_id']);
       return result['success'] == true;
     } else {
       throw Exception('Failed to login');

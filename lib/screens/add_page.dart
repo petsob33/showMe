@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AddPostPage extends StatefulWidget {
   @override
@@ -14,6 +15,20 @@ class _AddPostPageState extends State<AddPostPage> {
   DateTime selectedDate = DateTime.now();
   File? imageFile;
   TextEditingController descriptionController = TextEditingController();
+  int? userId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserId(); // Načtení user_id při inicializaci
+  }
+
+  Future<void> _loadUserId() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      userId = prefs.getInt('user_id');
+    });
+  }
 
   Future<void> _selectDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
@@ -46,6 +61,13 @@ class _AddPostPageState extends State<AddPostPage> {
       return;
     }
 
+    if (userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Chyba: Uživatelské ID není k dispozici.')),
+      );
+      return;
+    }
+
     // Převedení obrázku na base64
     List<int> imageBytes = await imageFile!.readAsBytes();
     String base64Image = base64Encode(imageBytes);
@@ -55,7 +77,7 @@ class _AddPostPageState extends State<AddPostPage> {
       'date': DateFormat('yyyy-MM-dd').format(selectedDate),
       'description': descriptionController.text,
       'image': base64Image,
-      'user':1
+      'user': userId
     };
 
     // Odeslání dat na API

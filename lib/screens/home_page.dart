@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 class HomePage extends StatefulWidget {
   @override
   _HomePageState createState() => _HomePageState();
@@ -13,6 +15,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   List<Map<String, dynamic>> posts = [];
   bool isLoading = false;
+  int? userId;
 
   @override
   void initState() {
@@ -24,10 +27,10 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       isLoading = true;
     });
-
+    final prefs = await SharedPreferences.getInstance();
+    userId = prefs.getInt('user_id');
     try {
-      final userId = 1; // Replace with the actual user ID
-
+      print('Uživatel $userId');
       final body = json.encode({'user_id': userId});
 
       print('Sending request to server...'); // Log the request
