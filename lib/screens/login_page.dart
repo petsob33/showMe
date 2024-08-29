@@ -3,11 +3,11 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
-
 class LoginPage extends StatefulWidget {
   @override
   _LoginPageState createState() => _LoginPageState();
 }
+
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
@@ -29,7 +29,10 @@ class _LoginPageState extends State<LoginPage> {
 
     if (response.statusCode == 200) {
       final result = jsonDecode(response.body);
-      prefs.setInt('user_id', result['user_id']);
+      if (result['success'] == true) {
+        await prefs.setInt('user_id', result['user_id']);
+        await prefs.setString('username', username);
+      }
       return result['success'] == true;
     } else {
       throw Exception('Failed to login');
@@ -54,7 +57,6 @@ class _LoginPageState extends State<LoginPage> {
       }
     }
   }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(

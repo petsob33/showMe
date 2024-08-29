@@ -4,7 +4,6 @@ import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:typed_data';
-
 import 'package:shared_preferences/shared_preferences.dart';
 
 class HomePage extends StatefulWidget {
@@ -16,12 +15,31 @@ class _HomePageState extends State<HomePage> {
   List<Map<String, dynamic>> posts = [];
   bool isLoading = false;
   int? userId;
+  String username = '';
 
   @override
   void initState() {
     super.initState();
+    _loadUserData();
     _fetchPosts();
   }
+
+  Future<void> _loadUserData() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      userId = prefs.getInt('user_id');
+      username = prefs.getString('username') ?? '';
+    });
+  }
+
+  Future<void> _logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('user_id');
+    await prefs.remove('username');
+    Navigator.pushNamed(context, '/');
+  }
+
+
 
   Future<void> _fetchPosts() async {
     setState(() {
@@ -91,12 +109,22 @@ class _HomePageState extends State<HomePage> {
       appBar: AppBar(
         title: Text('ShowMe'),
         actions: [
-          IconButton(
-            icon: Icon(Icons.search),
-            onPressed: () {
-              // Implementujte funkci vyhledávání
+          Center(child: Text(username,style: TextStyle(fontSize: 16,color: Colors.white),)),
+          PopupMenuButton<String>(
+            onSelected: (value){
+              if(value=="logout"){
+                _logout();
+              }
             },
-          ),
+            itemBuilder: (BuildContext context){
+              return {'Odhlásit se'}.map((String choice){
+                return PopupMenuItem<String>(
+                  value: 'logout',
+                  child: Text(choice),
+                );
+              }).toList();
+            },
+          )
         ],
       ),
       body: IndexedStack(

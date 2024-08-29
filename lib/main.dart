@@ -4,6 +4,7 @@ import 'screens/register_page.dart';
 import 'screens/home_page.dart';
 import 'screens/add_page.dart';
 import 'screens/search_page.dart';
+import 'screens/user_profile.dart';
 // Definice téma aplikace
 final ThemeData showMeTheme = ThemeData(
   primaryColor: Colors.black,
@@ -55,6 +56,7 @@ class MyApp extends StatelessWidget {
         '/home': (context) => HomePage(),
         '/add_post': (context) => AddPostPage(),
         '/search_page': (context) => SearchPage(),
+        '/user_profile': (context) => UserProfilePage(userId: ModalRoute.of(context)!.settings.arguments as int),
       },
     );
   }
