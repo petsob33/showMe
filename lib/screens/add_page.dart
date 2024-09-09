@@ -13,14 +13,15 @@ class AddPostPage extends StatefulWidget {
 
 class _AddPostPageState extends State<AddPostPage> {
   DateTime selectedDate = DateTime.now();
-  File? imageFile;
+  List<File> mediaFiles = [];
   TextEditingController descriptionController = TextEditingController();
   int? userId;
+  bool isSubmitting = false;
 
   @override
   void initState() {
     super.initState();
-    _loadUserId(); // Načtení user_id při inicializaci
+    _loadUserId();
   }
 
   Future<void> _loadUserId() async {
@@ -35,7 +36,7 @@ class _AddPostPageState extends State<AddPostPage> {
       context: context,
       initialDate: selectedDate,
       firstDate: DateTime(2000),
-      lastDate: DateTime(2101),
+      lastDate: DateTime.now(),
     );
     if (picked != null && picked != selectedDate) {
       setState(() {
@@ -44,19 +45,19 @@ class _AddPostPageState extends State<AddPostPage> {
     }
   }
 
-  Future<void> _selectImage() async {
-    final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery);
-    if (pickedFile != null) {
+  Future<void> _selectMedia() async {
+    final pickedFiles = await ImagePicker().pickMultiImage();
+    if (pickedFiles != null) {
       setState(() {
-        imageFile = File(pickedFile.path);
+        mediaFiles.addAll(pickedFiles.map((file) => File(file.path)));
       });
     }
   }
 
   Future<void> _submitPost() async {
-    if (imageFile == null) {
+    if (mediaFiles.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Prosím, vyberte obrázek.')),
+        SnackBar(content: Text('Prosím, vyberte alespoň jeden obrázek nebo video.')),
       );
       return;
     }
@@ -68,19 +69,24 @@ class _AddPostPageState extends State<AddPostPage> {
       return;
     }
 
-    // Převedení obrázku na base64
-    List<int> imageBytes = await imageFile!.readAsBytes();
-    String base64Image = base64Encode(imageBytes);
+    setState(() {
+      isSubmitting = true;
+    });
 
-    // Příprava dat pro odeslání
+    List<String> base64MediaList = [];
+    for (var file in mediaFiles) {
+      List<int> mediaBytes = await file.readAsBytes();
+      String base64Media = base64Encode(mediaBytes);
+      base64MediaList.add(base64Media);
+    }
+
     Map<String, dynamic> postData = {
       'date': DateFormat('yyyy-MM-dd').format(selectedDate),
       'description': descriptionController.text,
-      'image': base64Image,
+      'media': base64MediaList,
       'user': userId
     };
 
-    // Odeslání dat na API
     try {
       final response = await http.post(
         Uri.parse('http://lifetracker.euweb.cz/save_post.php'),
@@ -92,7 +98,7 @@ class _AddPostPageState extends State<AddPostPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Příspěvek byl úspěšně přidán.')),
         );
-        Navigator.pop(context);
+        Navigator.pop(context, true); // Pass true to indicate successful post
       } else {
         throw Exception('Failed to submit post');
       }
@@ -100,6 +106,10 @@ class _AddPostPageState extends State<AddPostPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Chyba při odesílání příspěvku: $e')),
       );
+    } finally {
+      setState(() {
+        isSubmitting = false;
+      });
     }
   }
 
@@ -118,14 +128,23 @@ class _AddPostPageState extends State<AddPostPage> {
             ),
             SizedBox(height: 16),
             ElevatedButton(
-              onPressed: _selectImage,
-              child: Text('Vybrat obrázek'),
+              onPressed: _selectMedia,
+              child: Text('Vybrat média'),
             ),
             SizedBox(height: 16),
-            if (imageFile != null)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Image.file(imageFile!, height: 200, width: double.infinity, fit: BoxFit.cover),
+            if (mediaFiles.isNotEmpty)
+              Container(
+                height: 100,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: mediaFiles.length,
+                  itemBuilder: (context, index) {
+                    return Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Image.file(mediaFiles[index], height: 80, width: 80, fit: BoxFit.cover),
+                    );
+                  },
+                ),
               ),
             SizedBox(height: 16),
             TextField(
@@ -135,8 +154,10 @@ class _AddPostPageState extends State<AddPostPage> {
             ),
             SizedBox(height: 24),
             ElevatedButton(
-              onPressed: _submitPost,
-              child: Text('Přidat příspěvek'),
+              onPressed: isSubmitting ? null : _submitPost,
+              child: isSubmitting
+                  ? CircularProgressIndicator()
+                  : Text('Přidat příspěvek'),
             ),
           ],
         ),

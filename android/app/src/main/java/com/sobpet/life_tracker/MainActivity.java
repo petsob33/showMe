@@ -1,4 +1,4 @@
-package com.example.life_tracker;
+package com.sobpet.life_tracker;
 
 import io.flutter.embedding.android.FlutterActivity;
 
