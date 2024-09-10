@@ -1,3 +1,4 @@
+import 'dart:ffi';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -22,6 +23,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
   List<Map<String, dynamic>> posts = [];
   bool isLoading = true;
   bool isFollowing = false;
+  int followers=0;
+  int following=0;
 
   @override
   void initState() {
@@ -29,6 +32,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
     _fetchUserData();
     _fetchUserPosts();
     _checkFollowStatus();
+    _fetchFollowCounts();
   }
 
   Future<void> _fetchUserData() async {
@@ -93,27 +97,27 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
   }
   //
-  // Future<void> _fetchFollowCounts() async {
-  //   try {
-  //     final response = await http.post(
-  //       Uri.parse('http://lifetracker.euweb.cz/get_follow_counts.php'),
-  //       headers: {'Content-Type': 'application/json'},
-  //       body: json.encode({'user_id': widget.userId}),
-  //     );
-  //
-  //     if (response.statusCode == 200) {
-  //       final data = json.decode(response.body);
-  //       setState(() {
-  //         followers = data['followers'];
-  //         following = data['following'];
-  //       });
-  //     } else {
-  //       throw Exception('Failed to load follow counts');
-  //     }
-  //   } catch (e) {
-  //     print('Error fetching follow counts: $e');
-  //   }
-  // }
+  Future<void> _fetchFollowCounts() async {
+    try {
+      final response = await http.post(
+        Uri.parse('http://lifetracker.euweb.cz/get_follow_counts.php'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'user_id': widget.userId}),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        setState(() {
+          followers = data['followers'];
+          following = data['following'];
+        });
+      } else {
+        throw Exception('Failed to load follow counts');
+      }
+    } catch (e) {
+      print('Error fetching follow counts: $e');
+    }
+  }
   Future<void> _checkFollowStatus() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -223,13 +227,13 @@ class _UserProfilePageState extends State<UserProfilePage> {
           Column(
             children: [
               Text('Sledující', style: TextStyle(fontWeight: FontWeight.bold)),
-              Text('6'),
+              Text('$followers'),
             ],
           ),
           Column(
             children: [
               Text('Sleduje', style: TextStyle(fontWeight: FontWeight.bold)),
-              Text('5'),
+              Text('$following'),
             ],
           ),
           ElevatedButton(
