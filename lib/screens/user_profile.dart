@@ -1,13 +1,8 @@
-import 'dart:ffi';
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'package:intl/intl.dart';
-import 'dart:typed_data';
-
 import 'package:shared_preferences/shared_preferences.dart';
+import 'shared_post_list_widget.dart';
 
 class UserProfilePage extends StatefulWidget {
   final int userId;
@@ -23,8 +18,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
   List<Map<String, dynamic>> posts = [];
   bool isLoading = true;
   bool isFollowing = false;
-  int followers=0;
-  int following=0;
+  int followers = 0;
+  int following = 0;
 
   @override
   void initState() {
@@ -61,7 +56,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   Future<void> _fetchUserPosts() async {
     setState(() {
-      isLoading = false;
+      isLoading = true;
     });
     try {
       final response = await http.post(
@@ -70,21 +65,23 @@ class _UserProfilePageState extends State<UserProfilePage> {
         body: json.encode({'user_id': widget.userId}),
       );
 
+      print('API response: ${response.body}');
+
       if (response.statusCode == 200) {
-        print('Response body: ${response.body}');
         final List<dynamic> data = json.decode(response.body);
         print('Decoded data: $data');
 
         setState(() {
           posts = data.map((item) {
-            print('Processing item: $item');
             return {
-              'date': _parseDate(item['date']),
+              'date': DateTime.parse(item['date']),
               'images': item['images'] as List<dynamic>?,
               'description': item['description'] as String? ?? 'No description',
+              'username': username,
             };
           }).toList();
         });
+
         print('Processed posts: $posts');
       } else {
         throw Exception('Failed to load posts. Status code: ${response.statusCode}');
@@ -92,11 +89,15 @@ class _UserProfilePageState extends State<UserProfilePage> {
     } catch (e) {
       print('Error fetching posts: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Chyba při načítání příspěvků')),
+        SnackBar(content: Text('Chyba při načítání příspěvků: $e')),
       );
+    } finally {
+      setState(() {
+        isLoading = false;
+      });
     }
   }
-  //
+
   Future<void> _fetchFollowCounts() async {
     try {
       final response = await http.post(
@@ -116,16 +117,20 @@ class _UserProfilePageState extends State<UserProfilePage> {
       }
     } catch (e) {
       print('Error fetching follow counts: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Chyba při načítání počtu sledujících')),
+      );
     }
   }
+
   Future<void> _checkFollowStatus() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      var userIdMy   = prefs.getInt('user_id');
+      var userIdMy = prefs.getInt('user_id');
       final response = await http.post(
         Uri.parse('http://lifetracker.euweb.cz/check_follow_status.php'),
         headers: {'Content-Type': 'application/json'},
-        body: json.encode({'follower_id': userIdMy, 'followed_id': widget.userId}), // Nahraďte 1 za ID přihlášeného uživatele
+        body: json.encode({'follower_id': userIdMy, 'followed_id': widget.userId}),
       );
 
       if (response.statusCode == 200) {
@@ -143,14 +148,15 @@ class _UserProfilePageState extends State<UserProfilePage> {
       );
     }
   }
+
   Future<void> _toggleFollow() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      var userIdMy   = prefs.getInt('user_id');
+      var userIdMy = prefs.getInt('user_id');
       final response = await http.post(
         Uri.parse('http://lifetracker.euweb.cz/toggle_follow.php'),
         headers: {'Content-Type': 'application/json'},
-        body: json.encode({'follower_id': userIdMy  , 'followed_id': widget.userId}), // Nahraďte 1 za ID přihlášeného uživatele
+        body: json.encode({'follower_id': userIdMy, 'followed_id': widget.userId}),
       );
 
       if (response.statusCode == 200) {
@@ -158,10 +164,12 @@ class _UserProfilePageState extends State<UserProfilePage> {
         if (data['message'] == 'Vztah byl úspěšně vytvořen') {
           setState(() {
             isFollowing = true;
+            followers++;
           });
         } else if (data['message'] == 'Vztah byl úspěšně odstraněn') {
           setState(() {
             isFollowing = false;
+            followers--;
           });
         } else {
           throw Exception('Failed to toggle follow status');
@@ -176,15 +184,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
       );
     }
   }
-  DateTime? _parseDate(dynamic dateString) {
-    if (dateString == null) return null;
-    try {
-      return DateTime.parse(dateString);
-    } catch (e) {
-      print('Error parsing date: $dateString. Error: $e');
-      return null;
-    }
-  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -207,7 +207,13 @@ class _UserProfilePageState extends State<UserProfilePage> {
     return Column(
       children: [
         _buildProfileHeader(),
-        Expanded(child: _buildPostsList()),
+        Expanded(
+          child: SharedPostListWidget(
+            posts: posts,
+            onRefresh: _fetchUserPosts,
+            showUsername: false,
+          ),
+        ),
       ],
     );
   }
@@ -248,131 +254,5 @@ class _UserProfilePageState extends State<UserProfilePage> {
         ],
       ),
     );
-  }
-
-  Widget _buildPostsList() {
-    if (posts.isEmpty) {
-      return Center(child: Text('Žádné příspěvky k zobrazení'));
-    }
-
-    return RefreshIndicator(
-      onRefresh: _fetchUserPosts,
-      child: ListView.separated(
-        itemCount: posts.length,
-        separatorBuilder: (context, index) => Container(
-          height: 40,
-          child: Center(
-            child: Container(
-              margin: EdgeInsets.all(3),
-              width: 2,
-              color: Colors.white,
-            ),
-          ),
-        ),
-        itemBuilder: (context, index) {
-          final post = posts[index];
-          return Container(
-            margin: EdgeInsets.symmetric(horizontal: 26),
-            child: Column(
-              children: [
-                if (post['date'] != null)
-                  Container(
-                    width: double.infinity,
-                    padding: EdgeInsets.symmetric(vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[900],
-                      borderRadius: BorderRadius.vertical(top: Radius.circular(10)),
-                    ),
-                    child: Center(
-                      child: Text(
-                        DateFormat('dd.MM.yyyy').format(post['date']),
-                        style: TextStyle(color: Colors.white, fontSize: 18),
-                      ),
-                    ),
-                  ),
-                if (post['images'] != null && (post['images'] as List).isNotEmpty)
-                  Container(
-                    color: Colors.grey[900],
-                    height: 150,
-                    child: PageView.builder(
-                      itemCount: (post['images'] as List).length,
-                      itemBuilder: (context, imageIndex) {
-                        return Center(
-                          child: _buildBase64Image((post['images'] as List)[imageIndex]),
-                        );
-                      },
-                    ),
-                  ),
-                Container(
-                  width: double.infinity,
-                  padding: EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[900],
-                    borderRadius: BorderRadius.vertical(bottom: Radius.circular(10)),
-                  ),
-                  child: Center(
-                    child: Text(
-                      post['description'] ?? 'No description',
-                      style: TextStyle(fontSize: 20, color: Colors.white),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildBase64Image(String? base64String) {
-    if (base64String == null || base64String.isEmpty) {
-      return Container(
-        height: 150,
-        width: 250,
-        color: Colors.grey[700],
-        child: Center(child: Text('No image', style: TextStyle(color: Colors.white))),
-      );
-    }
-
-    try {
-      base64String = base64String.trim();
-
-      if (base64String.startsWith('data:image')) {
-        base64String = base64String.split(',')[1];
-      }
-
-      print('Decoding base64 string: ${base64String.substring(0, min(50, base64String.length))}...');
-      Uint8List bytes = base64Decode(base64String);
-
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Image.memory(
-          bytes,
-          height: 150,
-          width: 250,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) {
-            print('Error loading image: $error');
-            return Container(
-              height: 150,
-              width: 250,
-              color: Colors.grey[700],
-              child: Center(child: Text('Error loading image', style: TextStyle(color: Colors.white))),
-            );
-          },
-        ),
-      );
-    } catch (e) {
-      print('Error decoding base64: $e');
-      print('Base64 string: ${base64String?.substring(0, min(50, base64String.length))}...');
-      return Container(
-        height: 150,
-        width: 250,
-        color: Colors.grey[700],
-        child: Center(child: Text('Invalid image format', style: TextStyle(color: Colors.white))),
-      );
-    }
   }
 }
